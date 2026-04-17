@@ -92,6 +92,11 @@ export default function TeacherSession() {
   const callsRef = useRef<Map<string, any>>(new Map());
   const [isMuted, setIsMuted] = useState(true);
 
+  const audioRecorderRef = useRef<MediaRecorder | null>(null);
+  const whisperWsRef = useRef<WebSocket | null>(null);
+  const audioIntervalRef = useRef<number | null>(null);
+  const [transcription, setTranscription] = useState<string>("");
+
   const toggleMute = () => {
     if (streamRef.current) {
       const newState = !isMuted;
@@ -108,6 +113,18 @@ export default function TeacherSession() {
     }
     callsRef.current.forEach(call => call.close());
     callsRef.current.clear();
+
+    if (audioRecorderRef.current && audioRecorderRef.current.state !== "inactive") {
+      try { audioRecorderRef.current.stop(); } catch (e) {}
+    }
+    if (audioIntervalRef.current) {
+      clearInterval(audioIntervalRef.current);
+    }
+    if (whisperWsRef.current) {
+      whisperWsRef.current.close();
+      whisperWsRef.current = null;
+    }
+    setTranscription("");
   };
 
   const startStream = async (type: "camera" | "screen") => {
@@ -138,6 +155,48 @@ export default function TeacherSession() {
         peerRef.current.on('open', callStudents);
       } else {
         callStudents();
+      }
+
+      // Initialize Whisper WebSockets
+      try {
+        const ws = new WebSocket("ws://localhost:8000/stream");
+        whisperWsRef.current = ws;
+
+        ws.onmessage = (event) => {
+          setTranscription(prev => {
+            const next = prev ? prev + " " + event.data : event.data;
+            // Keep it to reasonable length
+            if (next.length > 200) {
+              return next.substring(next.length - 200);
+            }
+            return next;
+          });
+        };
+
+        ws.onopen = () => {
+          if (mediaStream.getAudioTracks().length > 0) {
+            const audioTrack = mediaStream.getAudioTracks()[0];
+            const audioStream = new MediaStream([audioTrack]);
+            const recorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
+            audioRecorderRef.current = recorder;
+
+            recorder.ondataavailable = (e) => {
+              if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) {
+                ws.send(e.data);
+              }
+            };
+            
+            recorder.start();
+            audioIntervalRef.current = window.setInterval(() => {
+              if (audioRecorderRef.current?.state === "recording") {
+                audioRecorderRef.current.stop();
+                audioRecorderRef.current.start();
+              }
+            }, 5000);
+          }
+        };
+      } catch (err) {
+        console.error("Failed to connect to Whisper WebSocket", err);
       }
 
       mediaStream.getVideoTracks()[0].onended = () => {
@@ -178,7 +237,12 @@ export default function TeacherSession() {
       qc.invalidateQueries({ queryKey: ["/api/sessions"] });
       setIsLive(false);
       if (timerRef.current) clearInterval(timerRef.current);
-      toast({ title: "Session ended", description: "Session data saved to analytics" });
+      toast({ title: "Session ended", description: "Downloading attendance report..." });
+      
+      // Auto download attendance report
+      setTimeout(() => {
+        window.open(`/api/reports/session/${id}/attendance/pdf`, '_blank');
+      }, 1000);
     },
     onError: (error) => {
       toast({ title: "Failed to end session", description: String(error), variant: "destructive" });
@@ -374,6 +438,16 @@ export default function TeacherSession() {
                   autoPlay muted playsInline 
                   className="w-full h-full object-contain rounded-2xl bg-black shadow-2xl" 
                 />
+                
+                {/* Live Captioning Overlay */}
+                {transcription && (
+                  <div className="absolute bottom-32 max-w-3xl px-8 py-3 bg-black/60 backdrop-blur-md rounded-xl border border-white/10 shadow-xl z-20 transition-all duration-300 mx-auto left-0 right-0">
+                    <p className="text-white text-lg text-center font-medium leading-relaxed tracking-wide drop-shadow-md">
+                      {transcription}
+                    </p>
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   <Button size="sm" onClick={toggleMute} variant={isMuted ? "destructive" : "secondary"}>
                     {isMuted ? <MicOff className="w-4 h-4 mr-1.5" /> : <Mic className="w-4 h-4 mr-1.5" />}

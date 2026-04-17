@@ -3,10 +3,10 @@ import { Pool } from "pg";
 import { eq, and, desc, sql } from "drizzle-orm";
 import {
   users, institutions, classes, classEnrollments, sessions as sessionsTable,
-  attentionScores, books, assignments, readingSessions, notifications,
+  attentionScores, attendances, books, assignments, readingSessions, notifications,
   badges, quizzes, quizAttempts, assignmentSubmissions, directMessages,
   type User, type InsertUser, type Institution, type Class,
-  type ClassEnrollment, type Session, type AttentionScore,
+  type ClassEnrollment, type Session, type AttentionScore, type Attendance,
   type Book, type Assignment, type ReadingSession, type Notification,
   type Badge, type Quiz, type QuizAttempt, type AssignmentSubmission,
   type DirectMessage,
@@ -59,6 +59,10 @@ export interface IStorage {
   getSessionScores(sessionId: string): Promise<AttentionScore[]>;
   getStudentSessionScore(sessionId: string, studentId: string): Promise<AttentionScore[]>;
 
+  // Attendances
+  getAttendances(sessionId: string): Promise<Attendance[]>;
+  createAttendance(data: { sessionId: string; studentId: string; isPresent: boolean; isAttended: boolean; averageFocus: number }): Promise<Attendance>;
+
   // Books
   getBooks(teacherId?: string): Promise<Book[]>;
   getBook(id: string): Promise<Book | undefined>;
@@ -90,7 +94,7 @@ export interface IStorage {
   // Quizzes
   getQuizzes(classId: string): Promise<Quiz[]>;
   getQuiz(id: string): Promise<Quiz | undefined>;
-  createQuiz(data: { classId: string; title: string; questions: unknown[]; timeLimitSeconds?: number; antiCheatEnabled?: boolean; createdBy: string }): Promise<Quiz>;
+  createQuiz(data: { classId: string; title: string; questions: unknown[]; timeLimitSeconds?: number; antiCheatEnabled?: boolean; sourceType?: string; createdBy: string }): Promise<Quiz>;
   deleteQuiz(id: string): Promise<void>;
   createQuizAttempt(data: { studentId: string; quizId: string; score: number; answers: unknown[]; flags: unknown[] }): Promise<QuizAttempt>;
   getQuizAttempts(quizId: string): Promise<(QuizAttempt & { student?: User })[]>;
@@ -360,6 +364,15 @@ export class DatabaseStorage implements IStorage {
     ).orderBy(attentionScores.timestamp);
   }
 
+  async getAttendances(sessionId: string) {
+    return db.select().from(attendances).where(eq(attendances.sessionId, sessionId));
+  }
+
+  async createAttendance(data: { sessionId: string; studentId: string; isPresent: boolean; isAttended: boolean; averageFocus: number }) {
+    const [attendance] = await db.insert(attendances).values(data).returning();
+    return attendance;
+  }
+
   async getBooks(teacherId?: string) {
     if (teacherId) {
       return db.select().from(books).where(eq(books.uploadedBy, teacherId)).orderBy(desc(books.createdAt));
@@ -472,7 +485,7 @@ export class DatabaseStorage implements IStorage {
     return quiz;
   }
 
-  async createQuiz(data: { classId: string; title: string; questions: unknown[]; timeLimitSeconds?: number; antiCheatEnabled?: boolean; createdBy: string }) {
+  async createQuiz(data: { classId: string; title: string; questions: unknown[]; timeLimitSeconds?: number; antiCheatEnabled?: boolean; sourceType?: string; createdBy: string }) {
     const [quiz] = await db.insert(quizzes).values(data).returning();
     return quiz;
   }

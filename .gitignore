@@ -8,3 +8,8 @@ vite.config.ts.*
 openai_api.txt
 uploads/
 attached_assets/
+# Microservices
+microservices/**/.venv
+microservices/**/__pycache__
+microservices/**/target
+.python-version

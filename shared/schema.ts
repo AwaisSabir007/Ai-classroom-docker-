@@ -68,6 +68,16 @@ export const attentionScores = pgTable("attention_scores", {
   timestamp: timestamp("timestamp").defaultNow(),
 });
 
+export const attendances = pgTable("attendances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull(),
+  studentId: varchar("student_id").notNull(),
+  isPresent: boolean("is_present").notNull().default(false),
+  isAttended: boolean("is_attended").notNull().default(false),
+  averageFocus: real("average_focus").default(0),
+  timestamp: timestamp("timestamp").defaultNow(),
+});
+
 export const books = pgTable("books", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
@@ -126,6 +136,7 @@ export const quizzes = pgTable("quizzes", {
   questions: jsonb("questions").notNull().default(sql`'[]'::jsonb`),
   timeLimitSeconds: integer("time_limit_seconds"),
   antiCheatEnabled: boolean("anti_cheat_enabled").default(false),
+  sourceType: text("source_type").notNull().default("manual"),
   createdBy: varchar("created_by").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -226,6 +237,7 @@ export type Class = typeof classes.$inferSelect;
 export type ClassEnrollment = typeof classEnrollments.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type AttentionScore = typeof attentionScores.$inferSelect;
+export type Attendance = typeof attendances.$inferSelect;
 export type Book = typeof books.$inferSelect;
 export type Assignment = typeof assignments.$inferSelect;
 export type ReadingSession = typeof readingSessions.$inferSelect;
