@@ -45,7 +45,7 @@ export default function TeacherQuizzes() {
   // Manual form state
   const [title, setTitle] = useState("");
   const [classId, setClassId] = useState("");
-  const [antiCheat, setAntiCheat] = useState(false);
+  const [antiCheat, setAntiCheat] = useState(true);
   const [timeLimit, setTimeLimit] = useState("");
   const [questions, setQuestions] = useState<QuizQuestion[]>([
     { question: "", options: ["", "", "", ""], correctIndex: 0 },
@@ -115,7 +115,7 @@ export default function TeacherQuizzes() {
 
   function resetForm() {
     setTitle("");
-    setAntiCheat(false);
+    setAntiCheat(true);
     setTimeLimit("");
     setQuestions([{ question: "", options: ["", "", "", ""], correctIndex: 0 }]);
     setAiClassId("");
@@ -209,6 +209,7 @@ export default function TeacherQuizzes() {
         title: aiPreview.title,
         questions: aiPreview.questions,
         sourceType: "ai_generated",
+        antiCheatEnabled: antiCheat,
       });
 
       toast({ title: "AI Quiz saved!", description: "Students have been notified." });
@@ -502,6 +503,14 @@ export default function TeacherQuizzes() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="flex items-center gap-3 py-1">
+                    <Switch checked={antiCheat} onCheckedChange={setAntiCheat} data-testid="ai-switch-anti-cheat" />
+                    <div>
+                      <Label className="text-sm font-medium">Anti-Cheat Mode</Label>
+                      <p className="text-xs text-muted-foreground">Fullscreen, tab detection, copy block</p>
+                    </div>
                   </div>
 
                   {/* PDF Upload Zone */}
