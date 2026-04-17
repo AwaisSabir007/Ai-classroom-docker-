@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { createProxyMiddleware } from "http-proxy-middleware";
 
 const app = express();
 const httpServer = createServer(app);
@@ -33,6 +34,18 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+// Global Proxy for Audio Microservice WebSockets
+const audioProxy = createProxyMiddleware({
+  target: "http://localhost:8000",
+  changeOrigin: true,
+  ws: true,
+  pathFilter: "/api/audio-stream",
+  pathRewrite: {
+    "^/api/audio-stream": "/stream",
+  },
+  logLevel: "debug",
+});
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -58,6 +71,9 @@ app.use((req, res, next) => {
 
   next();
 });
+
+// Apply the proxy middleware BEFORE routes and session handling
+app.use(audioProxy);
 
 (async () => {
   await registerRoutes(httpServer, app);

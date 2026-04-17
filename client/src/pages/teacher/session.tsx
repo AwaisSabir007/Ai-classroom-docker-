@@ -135,8 +135,7 @@ export default function TeacherSession() {
         ? await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         : await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "monitor" }, audio: true });
         
-      mediaStream.getAudioTracks().forEach(t => t.enabled = false);
-      setIsMuted(true);
+      setIsMuted(false);
 
       setStream(mediaStream);
       streamRef.current = mediaStream;
@@ -159,7 +158,9 @@ export default function TeacherSession() {
 
       // Initialize Whisper WebSockets
       try {
-        const ws = new WebSocket("ws://localhost:8000/stream");
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/api/audio-stream`;
+    const ws = new WebSocket(wsUrl);
         whisperWsRef.current = ws;
 
         ws.onmessage = (event) => {
