@@ -572,7 +572,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           let fullText = "";
           for (let i = 1; i <= pdfData.numPages; i++) {
             const page = await pdfData.getPage(i);
-            const textContent = await parser.getPageText(page);
+            const textContent = await parser.getPageText(page, {});
             fullText += textContent + "\n";
           }
           finalContent += "\n\n" + fullText;
@@ -644,7 +644,7 @@ ${finalContent.substring(0, 30000)}
           let fullText = "";
           for (let i = 1; i <= pdfData.numPages; i++) {
             const page = await pdfData.getPage(i);
-            const textContent = await parser.getPageText(page);
+            const textContent = await parser.getPageText(page, {});
             fullText += textContent + "\n";
           }
           finalContent += "\n\n" + fullText;
