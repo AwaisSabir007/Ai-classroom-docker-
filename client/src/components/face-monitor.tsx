@@ -9,6 +9,20 @@ import {
 import { cn } from "@/lib/utils";
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
+// High-performance Rust Engine (WASM)
+let rustEngine: any = null;
+const initRust = async () => {
+  try {
+    const wasm = await import("../lib/wasm-engine/rust_analyzer");
+    await wasm.default();
+    rustEngine = new wasm.EngagementEngine();
+    console.log("🚀 EduSense: Rust-WASM Engine Initialized");
+  } catch (err) {
+    console.error("Failed to load Rust-WASM engine", err);
+  }
+};
+initRust();
+
 const emotionLabels: Record<string, { icon: any; color: string; bg: string }> = {
   focused: { icon: Eye, color: "text-emerald-600", bg: "bg-emerald-100" },
   neutral: { icon: Meh, color: "text-blue-600", bg: "bg-blue-100" },
@@ -154,29 +168,23 @@ export function FaceMonitor({
             setFaceDetected(true);
             
             const shapes = results.faceBlendshapes[0].categories;
-            const getScore = (name: string) => shapes.find((s) => s.categoryName === name)?.score || 0;
             
-            const eyeBlink = (getScore("eyeBlinkLeft") + getScore("eyeBlinkRight")) / 2;
-            const lookDown = (getScore("eyeLookDownLeft") + getScore("eyeLookDownRight")) / 2;
-            const lookUp = (getScore("eyeLookUpLeft") + getScore("eyeLookUpRight")) / 2;
-            const lookLeft = (getScore("eyeLookOutLeft") + getScore("eyeLookInRight")) / 2;
-            const lookRight = (getScore("eyeLookInLeft") + getScore("eyeLookOutRight")) / 2;
-            
-            let targetScore = 80;
-            
-            if (eyeBlink > 0.5) {
-              targetScore = 20; // Falling asleep or heavy blink
-            } else if (lookLeft > 0.5 || lookRight > 0.5 || lookUp > 0.5) {
-              targetScore = 40; // Looking away from screen
-            } else if (lookDown > 0.8) {
-              targetScore = 50; // Resting head too far down
+            if (rustEngine) {
+              // Call the compiled Rust logic for better and fast calculation
+              const result = rustEngine.calculate_engagement(shapes);
+              scoreRef.current = result.score;
+              // Emotion is handled in the interval heartbeat
             } else {
-              targetScore = 90 + (Math.random() * 10 - 5); // Focused
+              // Fallback to JS if Rust is still loading
+              const getScore = (name: string) => shapes.find((s) => s.categoryName === name)?.score || 0;
+              const eyeBlink = (getScore("eyeBlinkLeft") + getScore("eyeBlinkRight")) / 2;
+              const lookAway = (getScore("eyeLookOutLeft") + getScore("eyeLookInRight") + getScore("eyeLookUpLeft")) / 3;
+              let targetScore = 80;
+              if (eyeBlink > 0.5) targetScore = 20;
+              else if (lookAway > 0.5) targetScore = 40;
+              let newScore = scoreRef.current * 0.8 + targetScore * 0.2;
+              scoreRef.current = Math.max(0, Math.min(100, Math.round(newScore)));
             }
-            
-            // Smooth transitions
-            let newScore = scoreRef.current * 0.8 + targetScore * 0.2;
-            scoreRef.current = Math.max(0, Math.min(100, Math.round(newScore)));
           }
         } catch (err) {
           // Ignore processing errors

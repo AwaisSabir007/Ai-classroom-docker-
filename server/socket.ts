@@ -2,6 +2,7 @@ import { Server as SocketIOServer } from "socket.io";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { log } from "./index";
+import { analyzeSessionState, type SessionState, type TeacherIntervention } from "./agent";
 
 interface AttentionPayload {
   sessionId: string;
@@ -16,6 +17,8 @@ interface StudentSocket {
 }
 
 const connectedStudents = new Map<string, StudentSocket>();
+const activeSessionIntervals = new Map<string, NodeJS.Timeout>();
+const sessionMetrics = new Map<string, { lastScores: number[], emotions: string[] }>();
 
 function getUniqueStudentsInSession(sessionId: string): { id: string; name: string }[] {
   const seen = new Set<string>();
@@ -82,6 +85,39 @@ export function setupSocketIO(httpServer: Server, sessionMiddleware: any): Socke
       log(`Teacher ${userName} joined session room ${sessionId}`, "socket.io");
 
       socket.emit("session:current-students", getUniqueStudentsInSession(sessionId));
+
+      // Start Agentic Co-Pilot Autonomous Monitoring
+      if (!activeSessionIntervals.has(sessionId)) {
+        const interval = setInterval(async () => {
+          const metrics = sessionMetrics.get(sessionId);
+          if (!metrics || metrics.lastScores.length === 0) return;
+
+          const avgAttention = Math.round(metrics.lastScores.reduce((a, b) => a + b, 0) / metrics.lastScores.length);
+          const emotionCounts = metrics.emotions.reduce((acc, e) => {
+            acc[e] = (acc[e] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+          const dominantEmotion = Object.keys(emotionCounts).reduce((a, b) => emotionCounts[a] > emotionCounts[b] ? a : b);
+
+          const teacherSession = await storage.getSession(sessionId);
+          const class_ = teacherSession ? await storage.getClass(teacherSession.classId) : null;
+
+          const intervention = await analyzeSessionState({
+            classTitle: class_?.title || "Class",
+            subject: class_?.subject || "Subject",
+            avgAttention,
+            dominantEmotion,
+            recentTranscript: teacherSession?.transcript || "",
+            studentCount: getUniqueStudentsInSession(sessionId).length
+          });
+
+          if (intervention) {
+            io.to(`teacher:${sessionId}`).emit("copilot:suggestion", intervention);
+            log(`Agentic Co-Pilot issued ${intervention.type} for session ${sessionId}`, "socket.io");
+          }
+        }, 45000); // Analyze every 45s
+        activeSessionIntervals.set(sessionId, interval);
+      }
     });
 
     socket.on("student:join-session", async (sessionId: string) => {
@@ -139,6 +175,17 @@ export function setupSocketIO(httpServer: Server, sessionMiddleware: any): Socke
           score,
           emotion,
         });
+
+        // Track metrics for Agentic AI
+        if (!sessionMetrics.has(data.sessionId)) {
+          sessionMetrics.set(data.sessionId, { lastScores: [], emotions: [] });
+        }
+        const metrics = sessionMetrics.get(data.sessionId)!;
+        metrics.lastScores.push(score);
+        metrics.emotions.push(emotion);
+        if (metrics.lastScores.length > 50) metrics.lastScores.shift();
+        if (metrics.emotions.length > 50) metrics.emotions.shift();
+
       } catch (err) {
         log(`Failed to persist attention score: ${err}`, "socket.io");
       }
@@ -161,6 +208,13 @@ export function setupSocketIO(httpServer: Server, sessionMiddleware: any): Socke
 
       const session_ = await storage.getSession(sessionId);
       if (!session_ || session_.teacherId !== userId) return;
+
+      const interval = activeSessionIntervals.get(sessionId);
+      if (interval) {
+        clearInterval(interval);
+        activeSessionIntervals.delete(sessionId);
+      }
+      sessionMetrics.delete(sessionId);
 
       io.to(`session:${sessionId}`).emit("session:ended", { sessionId });
       log(`Teacher ended session ${sessionId} via socket`, "socket.io");

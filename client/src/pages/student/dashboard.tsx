@@ -15,7 +15,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   BookOpen, Zap, Flame, Trophy, Clock, ChevronRight, Users,
-  Play, Star, Brain, CheckCircle, Plus, ClipboardCheck, Shield, Radio, Wifi,
+  Play, Star, Brain, CheckCircle, Plus, ClipboardCheck, Shield, Radio, Wifi, Bot,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { AssignmentSubmit } from "@/components/assignment-submit";
@@ -221,11 +221,25 @@ export default function StudentDashboard() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold truncate">{cls.title}</p>
-                      <p className="text-xs text-muted-foreground">{cls.subject}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-xs text-muted-foreground">{cls.subject}</p>
+                        {cls.scheduleTime && (
+                          <>
+                            <span className="w-1 h-1 rounded-full bg-slate-300" />
+                            <span className="text-[10px] text-muted-foreground">{cls.scheduleTime}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    {cls.scheduleTime && (
-                      <span className="text-[10px] text-muted-foreground hidden sm:block">{cls.scheduleTime}</span>
-                    )}
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="h-8 text-xs shrink-0 whitespace-nowrap bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 border-blue-200"
+                      onClick={() => setLocation(`/student/tutor/${cls.id}`)}
+                    >
+                      <Bot className="w-3.5 h-3.5 mr-1" />
+                      Ask AI Tutor
+                    </Button>
                   </div>
                 ))
               )}

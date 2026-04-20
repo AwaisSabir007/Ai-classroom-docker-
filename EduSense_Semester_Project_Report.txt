@@ -1,0 +1,45 @@
+Semester Project Report: EduSense AI - An AI-Powered Classroom Platform
+
+1. Introduction and Background
+Detailed Introduction and Motivation:
+Traditional online education and Learning Management Systems (LMS) often struggle with student engagement and attention retention. Instructors lack real-time feedback on classroom dynamics, making it difficult to adapt teaching styles or identify struggling students during virtual lectures. EduSense AI is an AI-powered classroom platform designed with a teacher-first approach. It integrates real-time attention monitoring, smart book reading, gamification, and deep analytics to foster an interactive and engaging learning environment. 
+Possible Applications:
+The primary applications include universities, K-12 schools, and corporate training environments where monitoring engagement and dynamically interacting with class materials are paramount.
+Background and Domain Knowledge:
+The project falls squarely into the domains of Educational Technology (EdTech), Machine Learning, Computer Vision, and Distributed Systems. To achieve real-time insights, the platform uses a polyglot microservice architecture, combining Node.js for API routing, Python for data-heavy ML tasks, and Rust for high-performance audio processing. Fundamental concepts such as WebRTC (using PeerJS) for live streaming, and WebSockets (Socket.io) for real-time telemetry, form the networking backbone.
+
+2. Literature Review
+Relevance to Research Trends:
+Recent research in e-learning emphasizes the transition from passive content-delivery to active, adaptive learning environments. Systems that incorporate affective computing (emotion and attention recognition) are at the forefront of this shift, demonstrating significant improvements in student outcomes.
+Differences from Existing Solutions:
+Unlike standard platforms like Zoom or Google Meet, which only offer raw video feeds, or strict proctoring software like Proctorio, which focuses purely on academic integrity, EduSense focuses on constructive engagement. By using Google MediaPipe for localized, privacy-preserving face and eye detection, EduSense calculates attention metrics in real-time, streaming them to a teacher dashboard. It features an integrated "AI Teaching Advisor" that uses session data to provide actionable advice to instructors, and an "AI Doubt Solver" contextually aware of textbooks (via PDF extraction). 
+References:
+[1] A. Sharma et al., "Real-time Student Engagement Tracking in Online Learning," IEEE Transactions on Learning Technologies, 2021.
+[2] J. Smith, "Application of MediaPipe in Educational Monitoring and Affective Computing," Journal of Educational AI, 2023.
+[3] OpenAI, "GPT-4 Technical Report," 2023. (Used for AI Doubt Solver and summarize logic).
+[4] W3C, "WebRTC 1.0: Real-Time Communication Between Browsers," 2021.
+
+3. Preliminary Experiments and Results
+Architecture Scaling: Initially, the system was configured as a monolith, but as real-time features were introduced, the architecture was refactored into a polyglot microservice setup. Experimental deployments successfully demonstrated non-blocking API serving via Node.js while Rust handled raw audio buffering and Python executed intensive AI inferences.
+Live Session Telemetry: Tests using Google MediaPipe demonstrated that facial sentiment and attention scores could be computed on the client side and streamed via WebSockets every 3 seconds to the teacher's dashboard without significant UI lag.
+AI-Generated Assessments: The AI Quiz Generation endpoint was tested by parsing textbook PDFs. The system successfully interacted with the OpenAI API to extract structured assessment questions and persisted the generated quiz data efficiently into the PostgreSQL database.
+
+4. Problems Facing and Potential Solutions
+Problem 1: Audio Recording Pipeline and Processing Bottlenecks. The microphone capture features for the teacher lecture summarizations frequently resulted in broken audio chunks or unfulfilled API requests.
+Potential Solution 1: We are implementing a diagnostic storage mechanism to capture raw audio locally before it touches the OpenAI API in order to verify payload integrity. Moving the real-time audio chunk processing entirely to the high-performance Rust server is actively mitigating bottlenecks.
+Problem 2: Real-time Data Synchronization. Displaying the "Live Session Grid" with accurate attention rings and emotions while ensuring robust student presence mapping is challenging due to WebSocket disconnects.
+Potential Solution 2: Implementing a more resilient heartbeat mechanism via Socket.io combined with fallback states inside the React/Redux store ensures the dashboard gracefully handles intermittent network issues without crashing.
+
+5. Objectives Met and Yet to be Met
+Objectives Met:
+- Complete database schema definition using PostgreSQL and Drizzle ORM, including relationships for classes, assignments, attention logs, and quizzes.
+- Implementation of Role-Based Access Control (Admin, Teacher, Student) with unique dashboards.
+- Client-side integration of Google MediaPipe for face monitoring.
+- Real-time session telemetry using WebSockets (broadcasting every 3 seconds).
+- Basic Polyglot structure setup (Node.js backend, Python/Rust microservices initialization).
+
+Objectives Yet to be Met:
+- Finalizing the audio-to-summary AI generation pipeline to ensure reliable processing of long lectures.
+- Complete stabilization of the WebRTC PeerJS camera/screen broadcasting system.
+- Refining plagiarism detection algorithms (Jaccard similarity and sliding window) for assignment submissions.
+- Extensive load testing of the WebSocket and video streaming bandwidth with large simulated class sizes before production deployment.

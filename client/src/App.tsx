@@ -19,6 +19,7 @@ import StudentProfile from "@/pages/student/profile";
 import StudentReader from "@/pages/student/reader";
 import StudentQuiz from "@/pages/student/quiz";
 import StudentSession from "@/pages/student/session";
+import StudentTutor from "@/pages/student/tutor";
 import TeacherQuizzes from "@/pages/teacher/quizzes";
 import TeacherReports from "@/pages/teacher/reports";
 import TeacherAIAdvisor from "@/pages/teacher/ai-advisor";
@@ -101,6 +102,7 @@ function Router() {
         <Route path="/student/messages" component={StudentMessages} />
         <Route path="/student/profile" component={StudentProfile} />
         <Route path="/student/reader/:id" component={StudentReader} />
+        <Route path="/student/tutor/:id" component={StudentTutor} />
         <Route path="/admin" component={AdminDashboard} />
         <Route path="/admin/users" component={AdminUsers} />
         <Route path="/admin/classes" component={AdminClasses} />

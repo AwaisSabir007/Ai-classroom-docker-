@@ -45,7 +45,7 @@ export const classEnrollments = pgTable("class_enrollments", {
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 
-export const sessions = pgTable("sessions_log", {
+export const sessions = pgTable("lectures", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   classId: varchar("class_id").notNull(),
   teacherId: varchar("teacher_id").notNull(),
@@ -56,6 +56,8 @@ export const sessions = pgTable("sessions_log", {
   boredCount: integer("bored_count").default(0),
   startedAt: timestamp("started_at"),
   endedAt: timestamp("ended_at"),
+  transcript: text("transcript"),
+  summary: text("summary"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

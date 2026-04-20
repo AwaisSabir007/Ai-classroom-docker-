@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -14,7 +14,8 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   Square, Users, Brain, AlertTriangle, Eye, Radio, Wifi, WifiOff,
   TrendingUp, SmilePlus, Frown, Meh, HelpCircle, Zap, Clock,
-  Video, Monitor, ChevronRight, ScreenShare, Camera, Mic, MicOff
+  Video, Monitor, ChevronRight, ScreenShare, Camera, Mic, MicOff,
+  Bot
 } from "lucide-react";
 import Peer from "peerjs";
 import { cn } from "@/lib/utils";
@@ -79,23 +80,22 @@ export default function TeacherSession() {
   const qc = useQueryClient();
   const [attentionHistory, setAttentionHistory] = useState<{ t: number; avg: number }[]>([]);
   const [studentStates, setStudentStates] = useState<StudentState[]>([]);
+  const [copilotSuggestions, setCopilotSuggestions] = useState<any[]>([]);
+  const [isCopilotEnabled, setIsCopilotEnabled] = useState(true);
   const [isLive, setIsLive] = useState(true);
   const [socketConnected, setSocketConnected] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const tickRef = useRef(0);
   const studentStatesRef = useRef<StudentState[]>([]);
   const timerRef = useRef<number | null>(null);
-  
+
   const [stream, setStream] = useState<MediaStream | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const peerRef = useRef<Peer | null>(null);
   const callsRef = useRef<Map<string, any>>(new Map());
   const [isMuted, setIsMuted] = useState(true);
 
-  const audioRecorderRef = useRef<MediaRecorder | null>(null);
-  const whisperWsRef = useRef<WebSocket | null>(null);
-  const audioIntervalRef = useRef<number | null>(null);
-  const [transcription, setTranscription] = useState<string>("");
+
 
   const toggleMute = () => {
     if (streamRef.current) {
@@ -113,28 +113,16 @@ export default function TeacherSession() {
     }
     callsRef.current.forEach(call => call.close());
     callsRef.current.clear();
-
-    if (audioRecorderRef.current && audioRecorderRef.current.state !== "inactive") {
-      try { audioRecorderRef.current.stop(); } catch (e) {}
-    }
-    if (audioIntervalRef.current) {
-      clearInterval(audioIntervalRef.current);
-    }
-    if (whisperWsRef.current) {
-      whisperWsRef.current.close();
-      whisperWsRef.current = null;
-    }
-    setTranscription("");
   };
 
   const startStream = async (type: "camera" | "screen") => {
     try {
       stopStream();
 
-      const mediaStream = type === "camera" 
+      const mediaStream = type === "camera"
         ? await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         : await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "monitor" }, audio: true });
-        
+
       setIsMuted(false);
 
       setStream(mediaStream);
@@ -156,49 +144,7 @@ export default function TeacherSession() {
         callStudents();
       }
 
-      // Initialize Whisper WebSockets
-      try {
-        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/api/audio-stream`;
-    const ws = new WebSocket(wsUrl);
-        whisperWsRef.current = ws;
 
-        ws.onmessage = (event) => {
-          setTranscription(prev => {
-            const next = prev ? prev + " " + event.data : event.data;
-            // Keep it to reasonable length
-            if (next.length > 200) {
-              return next.substring(next.length - 200);
-            }
-            return next;
-          });
-        };
-
-        ws.onopen = () => {
-          if (mediaStream.getAudioTracks().length > 0) {
-            const audioTrack = mediaStream.getAudioTracks()[0];
-            const audioStream = new MediaStream([audioTrack]);
-            const recorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
-            audioRecorderRef.current = recorder;
-
-            recorder.ondataavailable = (e) => {
-              if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-                ws.send(e.data);
-              }
-            };
-            
-            recorder.start();
-            audioIntervalRef.current = window.setInterval(() => {
-              if (audioRecorderRef.current?.state === "recording") {
-                audioRecorderRef.current.stop();
-                audioRecorderRef.current.start();
-              }
-            }, 5000);
-          }
-        };
-      } catch (err) {
-        console.error("Failed to connect to Whisper WebSocket", err);
-      }
 
       mediaStream.getVideoTracks()[0].onended = () => {
         stopStream();
@@ -209,7 +155,20 @@ export default function TeacherSession() {
   };
 
   useEffect(() => {
-    return () => {
+      const socket = getSocket();
+      socket.on("copilot:suggestion", (suggestion: any) => {
+        setCopilotSuggestions(prev => [
+          { ...suggestion, id: Date.now(), timestamp: new Date() },
+          ...prev.slice(0, 4)
+        ]);
+        toast({
+          title: "AI Co-Pilot Suggestion",
+          description: suggestion.message,
+          variant: suggestion.priority === "high" ? "destructive" : "default"
+        });
+      });
+
+      return () => {
       stopStream();
       if (peerRef.current) {
         peerRef.current.destroy();
@@ -227,7 +186,7 @@ export default function TeacherSession() {
     mutationFn: (sessionId: string) => apiRequest("PUT", `/api/sessions/${sessionId}`, {
       status: "ended",
       endedAt: new Date().toISOString(),
-      ...(attentionHistory.length > 0 
+      ...(attentionHistory.length > 0
         ? { avgAttention: Math.round(attentionHistory.reduce((s, h) => s + h.avg, 0) / attentionHistory.length) }
         : {}),
     }),
@@ -239,7 +198,7 @@ export default function TeacherSession() {
       setIsLive(false);
       if (timerRef.current) clearInterval(timerRef.current);
       toast({ title: "Session ended", description: "Downloading attendance report..." });
-      
+
       // Auto download attendance report
       setTimeout(() => {
         window.open(`/api/reports/session/${id}/attendance/pdf`, '_blank');
@@ -249,6 +208,8 @@ export default function TeacherSession() {
       toast({ title: "Failed to end session", description: String(error), variant: "destructive" });
     }
   });
+
+
 
   useEffect(() => {
     if (!isLive) return;
@@ -392,6 +353,22 @@ export default function TeacherSession() {
             </h1>
           </div>
           <span className="text-xs text-muted-foreground hidden sm:inline">{classData?.title}</span>
+          <div className="flex items-center gap-2 ml-4">
+            <Bot className={cn("w-4 h-4", isCopilotEnabled ? "text-primary animate-pulse" : "text-muted-foreground")} />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Agentic Co-Pilot</span>
+            <div 
+              className={cn(
+                "w-8 h-4 rounded-full relative transition-colors cursor-pointer",
+                isCopilotEnabled ? "bg-primary" : "bg-muted"
+              )}
+              onClick={() => setIsCopilotEnabled(!isCopilotEnabled)}
+            >
+              <div className={cn(
+                "absolute top-1 w-2 h-2 rounded-full bg-white transition-all",
+                isCopilotEnabled ? "left-5" : "left-1"
+              )} />
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -415,6 +392,45 @@ export default function TeacherSession() {
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 relative bg-slate-900 flex items-center justify-center overflow-hidden">
+            {/* Agentic Co-Pilot Sidebar */}
+            {isCopilotEnabled && copilotSuggestions.length > 0 && (
+              <div className="absolute right-4 top-16 bottom-4 w-72 z-30 flex flex-col gap-3 pointer-events-none">
+                <div className="flex-1 overflow-y-auto pr-2 space-y-3 pointer-events-auto custom-scrollbar">
+                  {copilotSuggestions.map((suggestion) => (
+                    <div 
+                      key={suggestion.id}
+                      className={cn(
+                        "rounded-2xl p-4 shadow-xl border backdrop-blur-md animate-in slide-in-from-right-8 duration-500",
+                        suggestion.priority === "high" 
+                          ? "bg-red-500/90 border-red-400 text-white" 
+                          : "bg-white/95 border-slate-200 text-slate-800"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <Bot className={cn("w-4 h-4", suggestion.priority === "high" ? "text-white" : "text-primary")} />
+                        <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">
+                          {suggestion.type.replace('_', ' ')}
+                        </span>
+                        <span className="ml-auto text-[9px] opacity-60">
+                          {suggestion.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <p className="text-xs font-semibold leading-relaxed mb-3">{suggestion.message}</p>
+                      {suggestion.suggestedAction && (
+                        <Button 
+                          size="sm" 
+                          variant={suggestion.priority === "high" ? "secondary" : "outline"} 
+                          className="w-full h-7 text-[10px] font-bold rounded-lg"
+                        >
+                          {suggestion.suggestedAction}
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="absolute top-4 left-4 flex items-center gap-2 z-10">
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-sm">
                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
@@ -434,20 +450,13 @@ export default function TeacherSession() {
 
             {stream ? (
               <div className="flex flex-col items-center gap-4 w-full h-[60vh] z-10 px-6">
-                <video 
+                <video
                   ref={(v) => { if (v && !v.srcObject) v.srcObject = stream; }}
-                  autoPlay muted playsInline 
-                  className="w-full h-full object-contain rounded-2xl bg-black shadow-2xl" 
+                  autoPlay muted playsInline
+                  className="w-full h-full object-contain rounded-2xl bg-black shadow-2xl"
                 />
-                
-                {/* Live Captioning Overlay */}
-                {transcription && (
-                  <div className="absolute bottom-32 max-w-3xl px-8 py-3 bg-black/60 backdrop-blur-md rounded-xl border border-white/10 shadow-xl z-20 transition-all duration-300 mx-auto left-0 right-0">
-                    <p className="text-white text-lg text-center font-medium leading-relaxed tracking-wide drop-shadow-md">
-                      {transcription}
-                    </p>
-                  </div>
-                )}
+
+
 
                 <div className="flex gap-2">
                   <Button size="sm" onClick={toggleMute} variant={isMuted ? "destructive" : "secondary"}>
@@ -496,7 +505,7 @@ export default function TeacherSession() {
                 <div className="text-center">
                   <p className="text-xs text-white/50 mb-0.5">Bored Alert</p>
                   <p className={cn("text-xl font-bold font-mono", boredStudents.length > 0 ? "text-red-400" : "text-emerald-400")}
-                     data-testid="text-disengaged-count">
+                    data-testid="text-disengaged-count">
                     {boredStudents.length}
                   </p>
                 </div>
@@ -558,8 +567,8 @@ export default function TeacherSession() {
                         className={cn(
                           "rounded-xl border p-3 transition-all",
                           !student.connected ? "bg-muted/30 border-border opacity-60" :
-                          isBored ? "bg-red-50 border-red-200 ring-1 ring-red-200" :
-                          "bg-card border-border"
+                            isBored ? "bg-red-50 border-red-200 ring-1 ring-red-200" :
+                              "bg-card border-border"
                         )}
                       >
                         <div className="flex items-center gap-3">
@@ -615,10 +624,10 @@ export default function TeacherSession() {
                             <div className={cn(
                               "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium flex-1",
                               isBored ? "bg-red-100 text-red-700" :
-                              student.emotion === "focused" ? "bg-emerald-100 text-emerald-700" :
-                              student.emotion === "happy" ? "bg-amber-100 text-amber-700" :
-                              student.emotion === "confused" ? "bg-orange-100 text-orange-700" :
-                              "bg-blue-100 text-blue-700"
+                                student.emotion === "focused" ? "bg-emerald-100 text-emerald-700" :
+                                  student.emotion === "happy" ? "bg-amber-100 text-amber-700" :
+                                    student.emotion === "confused" ? "bg-orange-100 text-orange-700" :
+                                      "bg-blue-100 text-blue-700"
                             )}>
                               <EmotionIcon className="w-3 h-3" />
                               <span className="capitalize">{student.emotion}</span>

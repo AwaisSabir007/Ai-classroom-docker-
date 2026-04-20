@@ -1,11 +1,25 @@
 import express, { type Request, Response, NextFunction } from "express";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { createProxyMiddleware } from "http-proxy-middleware";
 
 const app = express();
 const httpServer = createServer(app);
+
+// Security Layer
+app.use(helmet({
+  contentSecurityPolicy: false, // Disabled for development simplicity, usually handled at gateway
+}));
+
+// DDoS Protection
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 100, 
+  message: "Too many requests from this IP, please try again after 15 minutes"
+});
+app.use("/api", limiter);
 
 declare module "http" {
   interface IncomingMessage {
@@ -34,17 +48,6 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
-// Global Proxy for Audio Microservice WebSockets
-const audioProxy = createProxyMiddleware({
-  target: "http://localhost:8000",
-  changeOrigin: true,
-  ws: true,
-  pathFilter: "/api/audio-stream",
-  pathRewrite: {
-    "^/api/audio-stream": "/stream",
-  },
-  logLevel: "debug",
-});
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -72,8 +75,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Apply the proxy middleware BEFORE routes and session handling
-app.use(audioProxy);
 
 (async () => {
   await registerRoutes(httpServer, app);

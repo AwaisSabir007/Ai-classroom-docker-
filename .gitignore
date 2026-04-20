@@ -8,8 +8,23 @@ vite.config.ts.*
 openai_api.txt
 uploads/
 attached_assets/
-# Microservices
-microservices/**/.venv
-microservices/**/__pycache__
-microservices/**/target
+# Microservices (Legacy)
+microservices/
+
+# Rust & WASM
+target/
+client/src/rust-analyzer/target/
+client/src/lib/wasm-engine/*
+!client/src/lib/wasm-engine/.gitkeep
+
+# Environment & Private
+.env
+openai_api.txt
+.gemini/
+.replit
 .python-version
+DS_Store
+
+# Uploads
+uploads/
+attached_assets/

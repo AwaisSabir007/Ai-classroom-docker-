@@ -12,7 +12,7 @@ import { FaceMonitor, CameraConsentDialog } from "@/components/face-monitor";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import {
   Radio, Eye, Brain, Wifi, WifiOff, TrendingUp,
-  SmilePlus, Frown, Meh, HelpCircle, AlertTriangle, Zap, Camera,
+  SmilePlus, Frown, Meh, HelpCircle, AlertTriangle, Zap, Camera, Bot
 } from "lucide-react";
 import Peer from "peerjs";
 import { cn } from "@/lib/utils";
@@ -189,12 +189,32 @@ export default function StudentSession() {
         <PageHeader title={sessionTitle || session?.title || "Session"} subtitle="Session has ended" />
         <div className="p-6">
           <Card>
-            <CardContent className="p-12 text-center">
+            <CardContent className="p-8 md:p-12 text-center">
               <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
                 <WifiOff className="w-8 h-8 text-muted-foreground" />
               </div>
-              <h3 className="text-lg font-semibold mb-2">Session Ended</h3>
-              <p className="text-sm text-muted-foreground mb-4">This session is no longer active</p>
+              <h3 className="text-xl font-semibold mb-2">Session Ended</h3>
+              <p className="text-sm text-muted-foreground mb-6">This session is no longer active.</p>
+
+              {session?.summary && (
+                <div className="mt-4 mb-8 text-left bg-blue-50/50 rounded-2xl p-6 md:p-8 border border-blue-100 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                      <Bot className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-blue-900 leading-tight">AI Lecture Summary</h4>
+                      <p className="text-xs text-blue-600/70">Generated from the teacher's live transcript</p>
+                    </div>
+                  </div>
+                  <div className="prose prose-sm prose-blue max-w-none text-blue-800/90 leading-relaxed">
+                    {session.summary.split('\n').map((para: string, idx: number) => (
+                      <p key={idx} className="mb-2 last:mb-0">{para}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <Button onClick={() => setLocation("/student")} data-testid="button-back-dashboard">
                 Back to Dashboard
               </Button>

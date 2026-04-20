@@ -251,6 +251,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const data = { ...req.body };
       if (data.endedAt) data.endedAt = new Date(data.endedAt);
+      
+      // If we are ending the session, let's also generate a summary if we have a transcript
+      if (data.status === "ended") {
+        const currentSession = await storage.getSession(req.params.id);
+        const fullTranscript = data.transcript || currentSession?.transcript;
+        
+        if (fullTranscript && fullTranscript.trim().length > 10) {
+          try {
+            const sumResponse = await openai.chat.completions.create({
+              model: "gpt-4o-mini",
+              messages: [
+                { role: "system", content: "You are an educational assistant. Summarize the following lecture transcript into a short, concise summary (max 3-5 sentences) suitable for a student report." },
+                { role: "user", content: fullTranscript }
+              ]
+            });
+            data.summary = sumResponse.choices[0]?.message?.content || "";
+          } catch (err) {
+            console.error("AI Summarization failed:", err);
+          }
+        }
+      }
+
       const session_ = await storage.updateSession(req.params.id, data);
       
       if (data.status === "ended" && session_) {
@@ -270,6 +292,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             isAttended: isPresent,
             averageFocus
           });
+          
+          if (data.summary) {
+            await storage.createNotification({
+              userId: student.id,
+              type: "session_summary",
+              title: `Lecture Summary: ${session_.title || "Session"}`,
+              body: data.summary,
+            });
+          }
         }
       }
       
@@ -1789,6 +1820,61 @@ Formatting rules:
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to mark messages as read" });
+    }
+  });
+
+  app.post("/api/classes/:classId/tutor/chat", requireAuth, async (req, res) => {
+    try {
+      const classId = req.params.classId;
+      const { message, history } = req.body;
+      
+      if (!message || typeof message !== "string") {
+        return res.status(400).json({ message: "Message is required" });
+      }
+
+      // 1. Verify enrollment
+      const userId = (req.session as any).userId;
+      const user = await storage.getUser(userId);
+      if (user?.role === "student") {
+        const isEnrolled = await storage.isEnrolled(classId, userId);
+        if (!isEnrolled) return res.status(403).json({ message: "Not enrolled in this class" });
+      }
+
+      // 2. Fetch past transcripts for this class
+      const sessions = await storage.getSessions(classId);
+      const transcripts = sessions
+        .filter(s => s.transcript && s.transcript.trim().length > 0)
+        .sort((a, b) => (new Date(b.startedAt || 0).getTime()) - (new Date(a.startedAt || 0).getTime()))
+        .slice(0, 5) // Last 5 lectures to save context space
+        .map(s => `--- LECTURE: ${s.title || 'Untitled'} ---\n${s.transcript}`)
+        .join("\n\n");
+
+      // 3. Build OpenAI prompt carefully restricting answers to transcripts
+      const systemPrompt = `You are the EduSense AI Tutor for this class. 
+Your goal is to answer the student's questions accurately and concisely.
+You MUST base your answers strictly on the following lecture transcripts from the teacher.
+If the transcripts do not contain the answer, politely let the student know that the teacher hasn't covered it yet.
+
+${transcripts.length > 0 ? `### LECTURE TRANSCRIPTS:\n${transcripts}` : `(No lecture transcripts available yet.)`}
+`;
+
+      const aiMessages = [
+        { role: "system", content: systemPrompt },
+        ...(history || []),
+        { role: "user", content: message }
+      ];
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: aiMessages as any,
+      });
+
+      const reply = completion.choices[0]?.message?.content || "I'm sorry, I couldn't process that.";
+
+      res.json({ reply });
+    } catch (err: any) {
+      console.error("AI Tutor chat failed:", err);
+      res.status(500).json({ message: "Failed to process chat" });
     }
   });
 

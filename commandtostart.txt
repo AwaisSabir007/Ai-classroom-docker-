@@ -1,1 +1,18 @@
+docker start edusense-postgres
+
+docker run -d \
+  --name edusense-postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=edusense \
+  -p 5432:5432 \
+  postgres:16
+
+npm run db:push
+
+
+cd /Users/macbookpro/Desktop/work/EduSense-main
+bash start-all.sh
+
+
 ./start-all.sh
